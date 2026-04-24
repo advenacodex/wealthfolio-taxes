@@ -226,6 +226,11 @@ src/
 
 ---
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V7V41YCZ2U)
+
+
+---
+
 ## Aviso legal
 WealthTax es un proyecto independiente y no está afiliado, asociado, autorizado, respaldado ni vinculado de ningún modo con Wealthfolio ni con sus creadores. El nombre "Wealthfolio" y cualquier logotipo o marca relacionada son propiedad de sus respectivos titulares. Este proyecto simplemente lee el fichero de base de datos generado por Wealthfolio y no forma parte de dicho producto.
 Este software se proporciona exclusivamente con fines informativos y de apoyo al usuario en la preparación de su declaración fiscal. Los resultados producidos por esta herramienta no constituyen asesoramiento fiscal, legal ni financiero. El usuario es el único responsable de verificar la exactitud de los cálculos y de cumplir con sus obligaciones tributarias ante la Agencia Tributaria o cualquier otra autoridad competente.
