@@ -1,0 +1,26 @@
+services:
+  wealthfolio-taxes:
+    container_name: wealthfolio-taxes
+    image: wealthfolio-taxes:latest
+    ports:
+      - "3001:3000"
+    user: "1000:10"
+    volumes:
+      # Map the directory as Read/Write. SQLite needs to update .db-shm files in WAL mode
+      # even when the database is opened as read-only.
+      - "${HOME}/Library/Application Support/wealthfolio:/app/db"
+    environment:
+      # Point to the database file inside the mapped directory
+      - WF_DB_PATH=/app/db/wealthfolio.db
+      # Login credentials — change these before deploying
+      - APP_USERNAME=admin
+      - APP_PASSWORD=taxfolio
+      # Random secret used to sign the session cookie — change this too
+      - AUTH_SECRET=cambia-este-secreto-por-uno-aleatorio
+    restart: unless-stopped
+    networks:
+      - default
+
+networks:
+  default:
+    driver: bridge
