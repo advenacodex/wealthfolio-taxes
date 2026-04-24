@@ -1,29 +1,58 @@
-# WealthTax 📊
+# WealthTax
 
-Calculadora web de ganancias y pérdidas patrimoniales para declarar el **IRPF** a partir de los datos de [Wealthfolio](https://wealthfolio.app). Implementa el método **FIFO** (First-In-First-Out).
+Calculadora web de ganancias y pérdidas patrimoniales para la declaración del **IRPF**, construida sobre los datos de [Wealthfolio](https://wealthfolio.app). Implementa el método **FIFO** (First-In-First-Out) conforme al criterio de la Agencia Tributaria española.
+
+> **100 % local** — Tus datos financieros nunca salen de tu máquina.
 
 ---
 
 ## Características
 
-- **Cálculo FIFO completo** — Procesa compras, ventas, splits/contrasplits y dividendos en scrip (TRANSFER_IN).
-- **Splits y contrasplits** — Ajusta retroactivamente los lotes anteriores al split; muestra siempre el precio y cantidad originales pre-split.
-- **Equivalentes en euros** — Cada valor en moneda extranjera muestra su equivalente en euros al tipo de cambio del día de la operación.
-- **Login protegido** — Pantalla de acceso con usuario y contraseña configurables por variables de entorno.
-- **Filtros** — Por año fiscal, cuenta y activo.
-- **Solo lectura** — Abre `wealthfolio.db` en modo `readonly`, sin riesgo de corrupción.
-- **100 % local** — Tus datos financieros nunca salen de tu máquina.
+- Cálculo FIFO completo con soporte de compras, ventas, splits/contrasplits y dividendos en scrip (`TRANSFER_IN`).
+- Ajuste retroactivo de lotes ante splits, con visualización siempre en términos pre-split.
+- Filtros por año fiscal, cuenta y activo.
+- Login protegido con credenciales configurables por variables de entorno.
+- Acceso a `wealthfolio.db` en modo **solo lectura** — sin riesgo de corrupción.
 
 ---
 
-## Despliegue con Docker Compose
+## Despliegue con Docker
 
-### Requisitos
+### Opción A — Usar la imagen precompilada
 
-- Docker (o OrbStack) instalado.
-- La imagen `wealthfolio-taxes:latest` construida localmente (ver [Construir la imagen](#construir-la-imagen)).
+Si recibes la imagen como fichero `.tar.gz`:
 
-### Configuración del `docker-compose.yml`
+```bash
+# 1. Importar la imagen
+docker load < wealthfolio-taxes-intel.tar.gz
+
+# 2. Verificar que se importó correctamente
+docker images | grep wealthfolio-taxes
+```
+
+Continúa con el paso [Configurar y arrancar](#configurar-y-arrancar).
+
+---
+
+### Opción B — Construir la imagen localmente
+
+La imagen se genera para **linux/amd64** (Intel/AMD). Compatible con Mac Apple Silicon mediante emulación QEMU.
+
+```bash
+docker build --platform linux/amd64 -t wealthfolio-taxes:latest .
+```
+
+#### Exportar la imagen para compartirla
+
+```bash
+docker save wealthfolio-taxes:latest | gzip > wealthfolio-taxes-intel.tar.gz
+```
+
+---
+
+### Configurar y arrancar
+
+Crea un fichero `docker-compose.yml` con el siguiente contenido, ajustando las rutas y credenciales:
 
 ```yaml
 services:
@@ -31,167 +60,129 @@ services:
     container_name: wealthfolio-taxes
     image: wealthfolio-taxes:latest
     ports:
-      - "3001:3000"        # La app queda en http://your_server_ip:3001
+      - "3001:3000"
     user: "1000:10"
     volumes:
-      # Monta el directorio de Wealthfolio (necesita R/W por los ficheros WAL de SQLite)
       - "${HOME}/Library/Application Support/wealthfolio:/app/db"
     environment:
-      - WF_DB_PATH=/app/db/wealthfolio.db   # Ruta interna a la base de datos
-      - APP_USERNAME=admin                   # Usuario del login
-      - APP_PASSWORD=taxfolio               # Contraseña del login
-      - AUTH_SECRET=cambia-este-secreto     # Secreto para firmar la cookie de sesión
+      - WF_DB_PATH=/app/db/wealthfolio.db
+      - APP_USERNAME=admin
+      - APP_PASSWORD=cambia-esta-contraseña
+      - AUTH_SECRET=cambia-este-secreto
     restart: unless-stopped
 ```
 
-> **Importante:** Cambia `APP_PASSWORD` y `AUTH_SECRET` antes de exponer la aplicación en red.
-
-### Arrancar
+> **Importante:** Modifica `APP_PASSWORD` y `AUTH_SECRET` antes de exponer la aplicación en red.
 
 ```bash
+# Arrancar
 docker compose up -d
-```
 
-Accede a [http://your_server_ip:3001](http://your_server_ip:3001). Se mostrará la pantalla de login.
+# Ver logs
+docker compose logs -f
 
-### Parar
-
-```bash
+# Parar
 docker compose down
 ```
 
----
+La aplicación queda disponible en **http://your_server_ip:3001**.
 
-## Construir la imagen
-
-La imagen se construye para **linux/amd64** (Intel). Compatible con Mac Apple Silicon mediante emulación.
+#### Sin Docker Compose
 
 ```bash
-docker build --platform linux/amd64 -t wealthfolio-taxes:latest .
-```
-
-### Exportar / importar la imagen
-
-```bash
-# Exportar a fichero comprimido
-docker save wealthfolio-taxes:latest | gzip > wealthfolio-taxes-intel.tar.gz
-
-# Importar en otra máquina
-docker load < wealthfolio-taxes-intel.tar.gz
+docker run -d \
+  --name wealthfolio-taxes \
+  -p 3001:3000 \
+  -v "/ruta/a/dir/wealthfolio:/app/db" \
+  -e WF_DB_PATH=/app/db/wealthfolio.db \
+  -e APP_USERNAME=admin \
+  -e APP_PASSWORD=cambia-esta-contraseña \
+  -e AUTH_SECRET=cambia-este-secreto \
+  wealthfolio-taxes:latest
 ```
 
 ---
 
 ## Autenticación
 
-La app incluye una pantalla de login. Las credenciales se configuran mediante variables de entorno:
+La sesión dura **7 días**. El botón de cierre de sesión se encuentra en la parte inferior del menú lateral.
 
-| Variable       | Por defecto | Descripción                                      |
-|----------------|-------------|--------------------------------------------------|
-| `APP_USERNAME` | `admin`     | Nombre de usuario                                |
-| `APP_PASSWORD` | `taxfolio`  | Contraseña                                       |
-| `AUTH_SECRET`  | (= password)| Secreto para la cookie de sesión (cámbialo)      |
-
-La sesión dura **7 días**. El botón "Cerrar sesión" está en la parte inferior del menú lateral.
+| Variable       | Por defecto | Descripción                              |
+|----------------|-------------|------------------------------------------|
+| `APP_USERNAME` | `admin`     | Nombre de usuario                        |
+| `APP_PASSWORD` | `taxfolio`  | Contraseña                               |
+| `AUTH_SECRET`  | —           | Secreto para firmar la cookie de sesión  |
 
 ---
 
 ## Base de datos
 
-La aplicación lee directamente la base de datos SQLite de Wealthfolio:
+La aplicación lee directamente el fichero SQLite de Wealthfolio en modo solo lectura.
 
-| Sistema  | Ruta por defecto                                          |
-|----------|-----------------------------------------------------------|
-| macOS    | `~/Library/Application Support/wealthfolio/wealthfolio.db` |
-| Linux    | `~/.local/share/wealthfolio/wealthfolio.db`               |
-| Docker.  | `la ruta definida en el container de Wealthfolio`.        | 
+| Sistema | Ruta por defecto                                            |
+|---------|-------------------------------------------------------------|
+| macOS   | `~/Library/Application Support/wealthfolio/wealthfolio.db` |
+| Linux   | `~/.local/share/wealthfolio/wealthfolio.db`                 |
 
-Para usar una ruta diferente, configura la variable `WF_DB_PATH`:
-
-```bash
-# Desarrollo local
-WF_DB_PATH="/ruta/a/wealthfolio.db" npm run dev
-
-# Docker sin compose
-docker run -e WF_DB_PATH=/app/db/wealthfolio.db \
-           -v "/ruta/a/dir:/app/db" \
-           -p 3001:3000 \
-           wealthfolio-taxes:latest
-```
+Para sobrescribir la ruta, define la variable `WF_DB_PATH`.
 
 ---
 
-## Cálculo FIFO
+## Metodología de cálculo
 
-### Método
+### FIFO
 
-Cada venta consume lotes de compra en orden cronológico (el primero comprado es el primero vendido). La ganancia o pérdida se calcula en euros:
+Cada venta consume lotes de compra en orden cronológico. La ganancia o pérdida se calcula siempre en euros:
 
 ```
-Ganancia = Ingresos por venta (€) − Base de coste FIFO (€)
+Ganancia = Ingresos netos (€) − Coste FIFO (€)
 
-Ingresos  = Cantidad × Precio_venta × FX_venta  − Comisiones_venta × FX_venta
-Coste     = Σ (Cantidad_lote × Precio_compra × FX_compra + Comisiones_compra × FX_compra)
+Ingresos = Cantidad × Precio_venta × FX_venta − Comisiones_venta × FX_venta
+Coste    = Σ (Cantidad_lote × Precio_compra × FX_compra + Comisiones_compra × FX_compra)
 ```
 
-Cada operación se convierte a euros **al tipo de cambio del día en que ocurrió**, siguiendo el criterio del IRPF español.
+Cada operación se convierte a euros al tipo de cambio oficial BCE del día exacto en que ocurrió.
 
 ### Splits y contrasplits
 
-Wealthfolio registra los splits como actividades de tipo `SPLIT` con el ratio en el campo `amount` (p.ej. `4` para un split 4:1).
-
-La aplicación ajusta **retroactivamente** todos los lotes anteriores al split:
+Los splits se registran en Wealthfolio como actividades de tipo `SPLIT`. La aplicación ajusta retroactivamente todos los lotes anteriores:
 
 ```
 cantidad_ajustada = cantidad_original × ratio
 precio_ajustado   = precio_original   / ratio
 ```
 
-En pantalla siempre se muestra el precio y la cantidad en términos **originales pre-split** para facilitar la verificación:
+En pantalla se muestran siempre los valores **pre-split** para facilitar la verificación con el broker.
+
+### Dividendos en scrip (`TRANSFER_IN`)
+
+Se tratan como ampliaciones de capital sin coste. El coste total se redistribuye proporcionalmente entre todos los lotes:
 
 ```
-Ejemplo: compra de 10 acciones a $248,91 → split 4:1 → venta de 10 acciones post-split
+ratio = (cantidad_existente + acciones_nuevas) / cantidad_existente
 
-Lote consumido: 10 post-split = 2,5 acciones originales
-Coste mostrado: 2,5 × $248,91 = $622,28
+nueva_cantidad     = cantidad_antigua × ratio
+nuevo_precio_unit  = precio_unit_antiguo / ratio
 ```
-
-### Dividendos en scrip (TRANSFER_IN)
-
-Las operaciones `TRANSFER_IN` se tratan como **ampliaciones de capital sin coste** (scrip dividend / acciones liberadas). El coste total existente se redistribuye proporcionalmente entre todos los lotes:
-
-```
-ratio_expansión = (cantidad_existente + acciones_nuevas) / cantidad_existente
-
-Para cada lote:
-  nueva_cantidad    = cantidad_antigua × ratio_expansión
-  nuevo_precio_unit = precio_unit_antiguo / ratio_expansión   (coste total conservado)
-```
-
-### Tipos de cambio BCE
-
-Para cada operación en moneda extranjera se obtiene el tipo oficial del BCE del día exacto vía [frankfurter.app](https://www.frankfurter.app). Si la consulta falla (sin conexión, festivo, etc.) se usa el tipo almacenado en Wealthfolio como respaldo.
 
 ---
 
 ## Tabla de resultados
 
-Cada venta aparece como una fila azul expandible. Al hacer clic se muestran los lotes de compra consumidos.
+Cada venta aparece como una fila expandible. Al hacer clic se despliegan los lotes de compra consumidos.
 
-| Columna              | Descripción                                                   |
-|----------------------|---------------------------------------------------------------|
-| Fecha                | Fecha de la venta                                             |
-| Activo               | Símbolo del instrumento                                       |
-| Cant.                | Número de acciones vendidas (post-split)                      |
-| Precio               | Precio unitario de venta en moneda original + equivalente €   |
-| Tasa FX              | Tipo de cambio del día (moneda → €)                          |
-| Total                | Precio × Cantidad + equivalente €                             |
-| Comisiones           | Comisión de venta en moneda original + equivalente €          |
-| Total − com.         | Ingresos netos en moneda original + equivalente €             |
-| Coste orig. (c/com.) | Coste de compra en moneda original incluidas comisiones        |
-| Benef./Pérd. (€)     | Ganancia o pérdida en euros según método FIFO                 |
-
-En las filas de lote (compra) se muestran los mismos campos referidos a la fecha de compra.
+| Columna              | Descripción                                                  |
+|----------------------|--------------------------------------------------------------|
+| Fecha                | Fecha de la venta                                            |
+| Activo               | Símbolo del instrumento                                      |
+| Cant.                | Acciones vendidas (términos post-split)                      |
+| Precio               | Precio unitario en moneda original + equivalente €           |
+| Tasa FX              | Tipo de cambio BCE del día (moneda → €)                     |
+| Total                | Precio × Cantidad + equivalente €                            |
+| Comisiones           | Comisión de venta en moneda original + equivalente €         |
+| Total − com.         | Ingresos netos en moneda original + equivalente €            |
+| Coste orig. (c/com.) | Coste de compra en moneda original incluidas comisiones      |
+| Benef./Pérd. (€)    | Ganancia o pérdida en euros según FIFO                       |
 
 ---
 
@@ -201,15 +192,14 @@ En las filas de lote (compra) se muestran los mismos campos referidos a la fecha
 # Instalar dependencias
 npm install
 
-# Arrancar con la base de datos por defecto
+# Arrancar (base de datos por defecto según SO)
 npm run dev
 
-# O apuntando a una base de datos específica
+# Apuntando a una base de datos específica
 WF_DB_PATH="/ruta/a/wealthfolio.db" npm run dev
 ```
 
-La app queda disponible en [http://localhost:3000](http://localhost:3000).  
-En desarrollo no se requiere login (no hay proxy activo en `next dev`).
+La app queda disponible en http://your_server_ip:3000. En entorno de desarrollo no se requiere login.
 
 ---
 
@@ -217,26 +207,31 @@ En desarrollo no se requiere login (no hay proxy activo en `next dev`).
 
 ```
 src/
-├── proxy.ts                      # Protección de rutas (Next.js 16)
+├── proxy.ts                    # Middleware de autenticación (Next.js)
 ├── app/
-│   ├── layout.tsx                # Layout raíz, fuentes, metadatos
-│   ├── page.tsx                  # Dashboard principal
-│   ├── login/
-│   │   └── page.tsx              # Pantalla de login
+│   ├── layout.tsx              # Layout raíz
+│   ├── page.tsx                # Dashboard principal
+│   ├── login/page.tsx          # Pantalla de login
 │   └── api/
-│       ├── auth/route.ts         # POST /api/auth  (login)
-│       │                         # DELETE /api/auth (logout)
-│       ├── taxes/route.ts        # GET /api/taxes  (cálculo FIFO)
-│       ├── accounts/route.ts     # GET /api/accounts
-│       ├── assets/route.ts       # GET /api/assets
-│       └── debug/route.ts        # GET /api/debug?symbol=AAPL (diagnóstico)
+│       ├── auth/route.ts       # POST /api/auth · DELETE /api/auth
+│       ├── taxes/route.ts      # GET  /api/taxes   — cálculo FIFO
+│       ├── accounts/route.ts   # GET  /api/accounts
+│       ├── assets/route.ts     # GET  /api/assets
+│       └── debug/route.ts      # GET  /api/debug?symbol=AAPL
 └── lib/
-    ├── fifo.ts                   # Motor FIFO: splits, scrip, lotes
-    ├── fxRates.ts                # Tipos de cambio BCE (frankfurter.app)
-    └── db.ts                     # Conexión SQLite (better-sqlite3, read-only)
+    ├── fifo.ts                 # Motor FIFO: splits, scrip, lotes
+    ├── fxRates.ts              # Tipos de cambio BCE (frankfurter.app)
+    └── db.ts                   # Conexión SQLite — better-sqlite3, read-only
 ```
 
+---
 
+## Aviso legal
+WealthTax es un proyecto independiente y no está afiliado, asociado, autorizado, respaldado ni vinculado de ningún modo con Wealthfolio ni con sus creadores. El nombre "Wealthfolio" y cualquier logotipo o marca relacionada son propiedad de sus respectivos titulares. Este proyecto simplemente lee el fichero de base de datos generado por Wealthfolio y no forma parte de dicho producto.
+Este software se proporciona exclusivamente con fines informativos y de apoyo al usuario en la preparación de su declaración fiscal. Los resultados producidos por esta herramienta no constituyen asesoramiento fiscal, legal ni financiero. El usuario es el único responsable de verificar la exactitud de los cálculos y de cumplir con sus obligaciones tributarias ante la Agencia Tributaria o cualquier otra autoridad competente.
+En ningún caso los autores o contribuidores de este proyecto serán responsables de ningún daño directo, indirecto, incidental, especial, ejemplar o consecuente (incluyendo, entre otros, pérdidas económicas, sanciones fiscales, pérdida de datos o interrupción de negocio) derivado del uso o la imposibilidad de uso de este software, incluso si se ha advertido de la posibilidad de dichos daños.
+El uso de este software implica la aceptación íntegra de este aviso.
 
-
-*Desarrollado para complementar el ecosistema de Wealthfolio · Solo lectura · Datos 100 % locales*
+Licencia
+Este programa es software libre: puedes redistribuirlo y/o modificarlo bajo los términos de la GNU Affero General Public License publicada por la Free Software Foundation, ya sea la versión 3 de la Licencia o (a tu elección) cualquier versión posterior.
+Este programa se distribuye con la esperanza de que sea útil, pero SIN NINGUNA GARANTÍA; sin siquiera la garantía implícita de COMERCIABILIDAD o IDONEIDAD PARA UN PROPÓSITO PARTICULAR. Consulta la GNU Affero General Public License para más detalles.
