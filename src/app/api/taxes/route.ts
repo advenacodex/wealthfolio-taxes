@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
     // Include all POSTED activities plus any SPLIT activities regardless of status
     // (splits may have a different status in wealthfolio but are needed for correct FIFO)
-    let query = `SELECT * FROM activities WHERE status = 'POSTED' OR activity_type = 'SPLIT'`;
+    let query = `SELECT * FROM activities WHERE (status = 'POSTED' OR activity_type = 'SPLIT')`;
     const params: any[] = [];
 
     if (accountId) {

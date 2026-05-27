@@ -8,10 +8,10 @@ export interface Lot {
   buyDate: string;
   quantity: number;          // post-split adjusted shares (used for FIFO accounting)
   unitPrice: number;         // EUR per post-split share (includes apportioned fee)
-  fee: number;               // total EUR fee for this lot
+  fee: number;               // total EUR fee for this lot (at purchase time)
   originalQuantity: number;  // post-split qty when lot was created (for fee apportionment)
   unitPriceOriginal: number; // TRUE original pre-split price in original currency
-  feeOriginal: number;       // total fee in original currency
+  feeOriginal: number;       // total fee in original currency (at purchase time)
   fxRate: number;
   currency: string;
   splitFactor: number;       // cumulative split factor applied to this lot (1 = no split)
@@ -42,7 +42,44 @@ export interface RealizedGain {
   }[];
 }
 
-export function calculateFIFO(activities: Activity[]): RealizedGain[] {
+export interface OpenPositionLot {
+  buyDate: string;
+  quantity: number;          // post-split shares remaining in this lot
+  unitPriceOriginal: number; // TRUE original pre-split price in original currency
+  fxRate: number;
+  currency: string;
+  splitFactor: number;       // cumulative split factor (1 = no split or reverse split)
+  feeOriginal: number;       // proportional remaining fee in original currency
+  feeEUR: number;            // proportional remaining fee in EUR
+  costEUR: number;           // quantity × unitPrice (EUR, includes proportional fee)
+}
+
+export interface OpenPosition {
+  assetId: string;
+  accountId: string;
+  totalQuantity: number;     // total post-split shares remaining across all lots
+  avgUnitPriceEUR: number;   // weighted average EUR cost per share (includes fees)
+  totalCostEUR: number;      // total cost basis in EUR (includes fees)
+  totalFeesEUR: number;      // total proportional fees in EUR
+  lots: OpenPositionLot[];
+}
+
+// ── Shared internal helper ────────────────────────────────────────────────────
+// Runs the full FIFO pipeline and returns both realized gains and the open-lots
+// map, so callers can extract whichever they need without duplicating logic.
+//
+// The map key uses "|||" as a separator (safe because SQLite IDs never contain
+// this sequence) so we can correctly round-trip assetId / accountId.
+interface OpenLotsEntry {
+  assetId: string;
+  accountId: string;
+  lots: Lot[];
+}
+
+function _runFIFO(activities: Activity[]): {
+  realizedGains: RealizedGain[];
+  openLotsMap: Map<string, OpenLotsEntry>;
+} {
   const sortedActivities = [...activities].sort(
     (a, b) => new Date(a.activity_date).getTime() - new Date(b.activity_date).getTime()
   );
@@ -108,11 +145,21 @@ export function calculateFIFO(activities: Activity[]): RealizedGain[] {
   }
 
   // ── 3. FIFO processing ───────────────────────────────────────────────────────
-  const openLots: Record<string, Lot[]> = {};
+  const openLotsMap = new Map<string, OpenLotsEntry>();
   const realizedGains: RealizedGain[] = [];
 
+  const getEntry = (assetId: string, accountId: string): OpenLotsEntry => {
+    const key = `${assetId}|||${accountId}`;
+    if (!openLotsMap.has(key)) {
+      openLotsMap.set(key, { assetId, accountId, lots: [] });
+    }
+    return openLotsMap.get(key)!;
+  };
+
   for (const act of adjustedActivities) {
-    const key = `${act.asset_id}_${act.account_id}`;
+    const entry = getEntry(act.asset_id, act.account_id);
+    const lots = entry.lots;
+
     const qty = Math.abs(parseFloat(act.quantity || '0'));
     const actType = (act.activity_type || '').toUpperCase();
     const splitFactor = act._splitFactor;  // 1 if no split affected this activity
@@ -125,7 +172,7 @@ export function calculateFIFO(activities: Activity[]): RealizedGain[] {
     const fee = rawFee * validFxRate;
 
     if (actType === 'TRANSFER_IN') {
-      // ── Scrip dividend / bonus share ─────────────────────────────────────────
+      // ── Scrip dividend / bonus share (ampliación de capital gratuita) ─────────
       // No acquisition cost. Redistribute total cost over the expanded lot quantity.
       // Each existing lot absorbs a proportional share of the incoming shares.
       //
@@ -136,10 +183,8 @@ export function calculateFIFO(activities: Activity[]): RealizedGain[] {
       //   new unitPriceOriginal= old unitPriceOriginal / expansionRatio (orig cost preserved)
       //   feeOriginal stays the same (same fee was paid at purchase)
       //   splitFactor stays the same (scrip is not a split)
-      const lots = openLots[key];
-      if (!lots || lots.length === 0) {
-        if (!openLots[key]) openLots[key] = [];
-        openLots[key].push({
+      if (lots.length === 0) {
+        lots.push({
           buyDate: act.activity_date,
           quantity: qty,
           unitPrice: 0,
@@ -156,21 +201,20 @@ export function calculateFIFO(activities: Activity[]): RealizedGain[] {
         if (totalExistingQty > 0) {
           const expansionRatio = (totalExistingQty + qty) / totalExistingQty;
           for (const lot of lots) {
-            lot.quantity         *= expansionRatio;
-            lot.originalQuantity *= expansionRatio;
-            lot.unitPrice        /= expansionRatio;
+            lot.quantity          *= expansionRatio;
+            lot.originalQuantity  *= expansionRatio;
+            lot.unitPrice         /= expansionRatio;
             lot.unitPriceOriginal /= expansionRatio;
             // splitFactor is unchanged — scrip expansion is separate from stock splits
           }
         }
       }
     } else if (['BUY', 'RECEIVE'].includes(actType)) {
-      if (!openLots[key]) openLots[key] = [];
       const unitCostWithFee = qty > 0 ? price + (fee / qty) : price;
-      openLots[key].push({
+      lots.push({
         buyDate: act.activity_date,
         quantity: qty,                           // post-split adjusted shares
-        unitPrice: unitCostWithFee,              // EUR per post-split share
+        unitPrice: unitCostWithFee,              // EUR per post-split share (includes fee)
         fee: fee,
         originalQuantity: qty,
         unitPriceOriginal: rawPrice * splitFactor, // TRUE original pre-split price
@@ -180,14 +224,14 @@ export function calculateFIFO(activities: Activity[]): RealizedGain[] {
         splitFactor,
       });
     } else if (['SELL', 'SEND', 'TRANSFER_OUT'].includes(actType)) {
-      if (!openLots[key] || openLots[key].length === 0) continue;
+      if (lots.length === 0) continue;
 
       let remainingToSell = qty;
       let totalCostBasis = 0;
       const matchedLots: RealizedGain['matchedLots'] = [];
 
-      while (remainingToSell > 0 && openLots[key].length > 0) {
-        const lot = openLots[key][0];
+      while (remainingToSell > 0 && lots.length > 0) {
+        const lot = lots[0];
         const consumeQty = Math.min(remainingToSell, lot.quantity);
 
         totalCostBasis += consumeQty * lot.unitPrice;
@@ -198,8 +242,8 @@ export function calculateFIFO(activities: Activity[]): RealizedGain[] {
 
         matchedLots.push({
           buyDate: lot.buyDate,
-          quantity: consumeQty,                  // post-split shares sold from this lot
-          buyPrice: lot.unitPrice,               // EUR per post-split share
+          quantity: consumeQty,                    // post-split shares sold from this lot
+          buyPrice: lot.unitPrice,                 // EUR per post-split share
           buyPriceOriginal: lot.unitPriceOriginal, // original pre-split price
           buyFeeOriginal: proportionalFeeOrig,
           buyFxRate: lot.fxRate,
@@ -211,7 +255,7 @@ export function calculateFIFO(activities: Activity[]): RealizedGain[] {
         remainingToSell -= consumeQty;
 
         if (lot.quantity < 1e-9) {
-          openLots[key].shift();
+          lots.shift();
         }
       }
 
@@ -236,5 +280,59 @@ export function calculateFIFO(activities: Activity[]): RealizedGain[] {
     }
   }
 
-  return realizedGains;
+  return { realizedGains, openLotsMap };
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/** Returns realized gains (closed positions). Signature unchanged. */
+export function calculateFIFO(activities: Activity[]): RealizedGain[] {
+  return _runFIFO(activities).realizedGains;
+}
+
+/** Returns currently open (not yet sold) positions with lot detail. */
+export function calculateOpenPositions(activities: Activity[]): OpenPosition[] {
+  const { openLotsMap } = _runFIFO(activities);
+  const result: OpenPosition[] = [];
+
+  for (const { assetId, accountId, lots } of openLotsMap.values()) {
+    // Keep only lots with meaningful quantity remaining
+    const activeLots = lots.filter(l => l.quantity > 1e-9);
+    if (activeLots.length === 0) continue;
+
+    const totalQuantity = activeLots.reduce((s, l) => s + l.quantity, 0);
+    // totalCostEUR: sum(qty × unitPrice) — unitPrice already bakes in fee/share
+    const totalCostEUR = activeLots.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
+    // totalFeesEUR: proportional remaining fee = (remaining/original) × totalFee
+    const totalFeesEUR = activeLots.reduce((s, l) => {
+      const prop = l.originalQuantity > 0 ? l.quantity / l.originalQuantity : 1;
+      return s + l.fee * prop;
+    }, 0);
+    const avgUnitPriceEUR = totalQuantity > 0 ? totalCostEUR / totalQuantity : 0;
+
+    result.push({
+      assetId,
+      accountId,
+      totalQuantity,
+      avgUnitPriceEUR,
+      totalCostEUR,
+      totalFeesEUR,
+      lots: activeLots.map(l => {
+        const prop = l.originalQuantity > 0 ? l.quantity / l.originalQuantity : 1;
+        return {
+          buyDate: l.buyDate,
+          quantity: l.quantity,
+          unitPriceOriginal: l.unitPriceOriginal,
+          fxRate: l.fxRate,
+          currency: l.currency,
+          splitFactor: l.splitFactor,
+          feeOriginal: l.feeOriginal * prop,
+          feeEUR: l.fee * prop,
+          costEUR: l.quantity * l.unitPrice,
+        };
+      }),
+    });
+  }
+
+  return result;
 }
