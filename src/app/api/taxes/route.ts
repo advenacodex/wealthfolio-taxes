@@ -6,6 +6,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const year = searchParams.get('year');
   const accountId = searchParams.get('accountId');
+  const group = searchParams.get('group');
   const assetId = searchParams.get('assetId');
 
   try {
@@ -21,7 +22,11 @@ export async function GET(request: Request) {
     `;
     const params: any[] = [];
 
-    if (accountId) {
+    if (group) {
+      // Filter to all accounts in the selected group; show all sales from the group.
+      query += ` AND a.account_id IN (SELECT id FROM accounts WHERE "group" = ?)`;
+      params.push(group);
+    } else if (accountId) {
       // Expand the filter to all accounts sharing the same group so the FIFO
       // engine sees the full group pool. Accounts with no group are treated as
       // their own single-account pool.
@@ -46,7 +51,8 @@ export async function GET(request: Request) {
 
     // When filtered by account, show only sales that happened in that account.
     // (Matched lots may come from other accounts in the group — that's correct.)
-    let filteredGains = accountId
+    // When filtered by group, all sales from the group are shown (no post-filter).
+    let filteredGains = accountId && !group
       ? gains.filter(g => g.accountId === accountId)
       : gains;
 

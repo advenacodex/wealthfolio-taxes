@@ -4,6 +4,14 @@
 
 ## 2026-06-05
 
+### Added
+- **Filtro por Account Group**: nuevo selector "Grupo" en la barra lateral que aparece solo cuando existen grupos definidos en la base de datos. Al seleccionar un grupo se muestran las operaciones de todas las cuentas del grupo; es mutuamente exclusivo con el filtro de Cuenta (seleccionar uno limpia el otro).
+  - `src/app/api/account-groups/route.ts`: nuevo endpoint GET que devuelve los nombres de grupo distintos y no nulos de las cuentas activas.
+  - `src/app/api/taxes/route.ts` y `src/app/api/open-positions/route.ts`: aceptan el parámetro `group`; cuando se recibe, filtran las actividades a las cuentas de ese grupo y omiten el post-filtro por cuenta individual.
+  - `src/app/page.tsx`: carga los grupos al inicio, añade el estado `selectedGroup`, renderiza el selector condicionalmente y lo conecta a los endpoints.
+
+## 2026-06-05
+
 ### Changed
 - **FIFO por Account Group**: el cálculo FIFO ahora agrupa los lotes por el campo `group` de la tabla `accounts` en lugar de por cuenta individual. Si varias cuentas comparten el mismo grupo, sus lotes se combinan en un único pool de FIFO por activo. Cuentas sin grupo se tratan como pool individual (comportamiento anterior).
   - `src/lib/db.ts`: añadido `group?: string | null` a `Account` y `account_group?: string | null` a `Activity`.

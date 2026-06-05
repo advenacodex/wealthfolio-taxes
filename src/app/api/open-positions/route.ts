@@ -6,6 +6,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const year      = searchParams.get('year');
   const accountId = searchParams.get('accountId');
+  const group     = searchParams.get('group');
   const assetId   = searchParams.get('assetId');
 
   try {
@@ -23,7 +24,10 @@ export async function GET(request: Request) {
     `;
     const params: any[] = [];
 
-    if (accountId) {
+    if (group) {
+      query += ` AND a.account_id IN (SELECT id FROM accounts WHERE "group" = ?)`;
+      params.push(group);
+    } else if (accountId) {
       // Expand to all accounts sharing the same group for correct FIFO pooling.
       const acct = db.prepare('SELECT "group" FROM accounts WHERE id = ?').get(accountId) as { group: string | null } | undefined;
       const grp = acct?.group;

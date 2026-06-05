@@ -6,6 +6,7 @@
 
 # Done
 
+- [x] Añade Account Group como filtro en la barra lateral (selector "Grupo"), mutuamente exclusivo con el filtro de Cuenta
 - [x] FIFO agrupado por Account Group: al vender un activo en una cuenta, se usan los lotes de todas las cuentas del mismo grupo para el cálculo FIFO
 
 - [x] Añadir vista "Posiciones Abiertas" con toggle de vistas, tabla de lotes activos con splits/contrasplits/ampliaciones, y sus totales (acciones, precio medio, comisiones)

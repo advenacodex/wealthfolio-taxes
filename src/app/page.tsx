@@ -133,8 +133,10 @@ export default function TaxesDashboard() {
 
   // Filter state
   const [accounts, setAccounts]           = useState<Account[]>([]);
+  const [accountGroups, setAccountGroups] = useState<string[]>([]);
   const [assets, setAssets]               = useState<Asset[]>([]);
   const [selectedYear, setSelectedYear]   = useState<string>("");
+  const [selectedGroup, setSelectedGroup] = useState<string>("");
   const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [selectedAsset, setSelectedAsset] = useState<string>("");
 
@@ -185,6 +187,13 @@ export default function TaxesDashboard() {
       })
       .catch(err => console.error("Fetch error:", err));
 
+    fetch("/api/account-groups")
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setAccountGroups(data);
+      })
+      .catch(err => console.error("Fetch error:", err));
+
     fetch("/api/assets")
       .then(res => res.json())
       .then(data => {
@@ -207,6 +216,7 @@ export default function TaxesDashboard() {
 
     const params = new URLSearchParams();
     if (selectedYear)    params.append("year",      selectedYear);
+    if (selectedGroup)   params.append("group",     selectedGroup);
     if (selectedAccount) params.append("accountId", selectedAccount);
     if (selectedAsset)   params.append("assetId",   selectedAsset);
 
@@ -243,7 +253,7 @@ export default function TaxesDashboard() {
         setResults([]);
         setOpenPositions([]);
       });
-  }, [isMounted, activeView, selectedYear, selectedAccount, selectedAsset]);
+  }, [isMounted, activeView, selectedYear, selectedGroup, selectedAccount, selectedAsset]);
 
   // ── Derived totals ──────────────────────────────────────────────────────────
 
@@ -299,13 +309,35 @@ export default function TaxesDashboard() {
                 </select>
               </div>
 
+              {accountGroups.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 px-2 text-sm font-medium">
+                    <Wallet size={14} /> Grupo
+                  </div>
+                  <select
+                    value={selectedGroup}
+                    onChange={(e) => {
+                      setSelectedGroup(e.target.value);
+                      if (e.target.value) setSelectedAccount("");
+                    }}
+                    className="w-full bg-background border border-border rounded-md p-2 text-sm outline-none focus:ring-1 focus:ring-primary/20"
+                  >
+                    <option value="">Todos los grupos</option>
+                    {accountGroups.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-1">
                 <div className="flex items-center gap-2 px-2 text-sm font-medium">
                   <Wallet size={14} /> Cuenta
                 </div>
                 <select
                   value={selectedAccount}
-                  onChange={(e) => setSelectedAccount(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedAccount(e.target.value);
+                    if (e.target.value) setSelectedGroup("");
+                  }}
                   className="w-full bg-background border border-border rounded-md p-2 text-sm outline-none focus:ring-1 focus:ring-primary/20"
                 >
                   <option value="">Todas las cuentas</option>
