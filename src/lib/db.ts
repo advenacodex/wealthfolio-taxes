@@ -42,6 +42,7 @@ export interface Account {
   id: string;
   name: string;
   currency: string;
+  group?: string | null;
 }
 
 export interface Asset {
@@ -63,4 +64,6 @@ export interface Activity {
   fee: string;
   currency: string;
   fx_rate: string;
+  // Populated via LEFT JOIN with accounts in API routes; used for group-level FIFO
+  account_group?: string | null;
 }

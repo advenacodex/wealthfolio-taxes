@@ -11,28 +11,50 @@ export async function GET(request: Request) {
   try {
     const db = getDb();
 
-    // Include all POSTED activities plus any SPLIT activities regardless of status
-    // (splits may have a different status in wealthfolio but are needed for correct FIFO)
-    let query = `SELECT * FROM activities WHERE (status = 'POSTED' OR activity_type = 'SPLIT')`;
+    // JOIN with accounts to get the group, enabling group-level FIFO pooling.
+    // "group" is a reserved SQL keyword — must be quoted.
+    let query = `
+      SELECT a.*, acc."group" AS account_group
+      FROM activities a
+      LEFT JOIN accounts acc ON acc.id = a.account_id
+      WHERE (a.status = 'POSTED' OR a.activity_type = 'SPLIT')
+    `;
     const params: any[] = [];
 
     if (accountId) {
-      query += ' AND account_id = ?';
-      params.push(accountId);
+      // Expand the filter to all accounts sharing the same group so the FIFO
+      // engine sees the full group pool. Accounts with no group are treated as
+      // their own single-account pool.
+      const acct = db.prepare('SELECT "group" FROM accounts WHERE id = ?').get(accountId) as { group: string | null } | undefined;
+      const grp = acct?.group;
+      if (grp) {
+        query += ` AND a.account_id IN (SELECT id FROM accounts WHERE "group" = ?)`;
+        params.push(grp);
+      } else {
+        query += ` AND a.account_id = ?`;
+        params.push(accountId);
+      }
     }
 
     if (assetId) {
-      query += ' AND asset_id = ?';
+      query += ` AND a.asset_id = ?`;
       params.push(assetId);
     }
 
     const activities = db.prepare(query).all(...params) as Activity[];
-
     const gains = calculateFIFO(activities);
 
-    const filteredGains = year
-      ? gains.filter(g => new Date(g.sellDate).getFullYear() === parseInt(year))
+    // When filtered by account, show only sales that happened in that account.
+    // (Matched lots may come from other accounts in the group — that's correct.)
+    let filteredGains = accountId
+      ? gains.filter(g => g.accountId === accountId)
       : gains;
+
+    if (year) {
+      filteredGains = filteredGains.filter(
+        g => new Date(g.sellDate).getFullYear() === parseInt(year)
+      );
+    }
 
     return NextResponse.json(filteredGains);
   } catch (error: any) {

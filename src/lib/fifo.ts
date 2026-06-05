@@ -103,9 +103,17 @@ function _runFIFO(activities: Activity[]): {
   //   unitPriceOriginal = 25 × 4 = 100 USD  ← original price
   //   When selling 10 post-split shares: origEquiv = 10/4 = 2.5 original shares
   //   Cost = 2.5 × 100 = 250 USD  ✓
+  //
+  // Deduplication: when activities span multiple accounts in the same group, each
+  // account may record the same split event. We deduplicate by (assetId, date) so
+  // the split factor is applied exactly once.
   const splitFactors: Record<string, { date: string; ratio: number }[]> = {};
+  const seenSplits = new Set<string>();
   for (const act of sortedActivities) {
     if (act.activity_type.toUpperCase() === 'SPLIT') {
+      const splitKey = `${act.asset_id}|||${act.activity_date}`;
+      if (seenSplits.has(splitKey)) continue;
+      seenSplits.add(splitKey);
       // In wealthfolio, the split ratio is stored in unit_price (the "Price" column),
       // NOT in quantity (which is left blank for split activities).
       // e.g. a 4-for-1 forward split has unit_price = 4.
@@ -148,16 +156,19 @@ function _runFIFO(activities: Activity[]): {
   const openLotsMap = new Map<string, OpenLotsEntry>();
   const realizedGains: RealizedGain[] = [];
 
-  const getEntry = (assetId: string, accountId: string): OpenLotsEntry => {
-    const key = `${assetId}|||${accountId}`;
+  // Group key: use account_group when available (group-level FIFO), otherwise fall
+  // back to account_id so single-account setups continue to work unchanged.
+  const getEntry = (assetId: string, act: AdjustedActivity): OpenLotsEntry => {
+    const groupKey = act.account_group || act.account_id;
+    const key = `${assetId}|||${groupKey}`;
     if (!openLotsMap.has(key)) {
-      openLotsMap.set(key, { assetId, accountId, lots: [] });
+      openLotsMap.set(key, { assetId, accountId: groupKey, lots: [] });
     }
     return openLotsMap.get(key)!;
   };
 
   for (const act of adjustedActivities) {
-    const entry = getEntry(act.asset_id, act.account_id);
+    const entry = getEntry(act.asset_id, act);
     const lots = entry.lots;
 
     const qty = Math.abs(parseFloat(act.quantity || '0'));

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## 2026-06-05
+
+### Changed
+- **FIFO por Account Group**: el cálculo FIFO ahora agrupa los lotes por el campo `group` de la tabla `accounts` en lugar de por cuenta individual. Si varias cuentas comparten el mismo grupo, sus lotes se combinan en un único pool de FIFO por activo. Cuentas sin grupo se tratan como pool individual (comportamiento anterior).
+  - `src/lib/db.ts`: añadido `group?: string | null` a `Account` y `account_group?: string | null` a `Activity`.
+  - `src/lib/fifo.ts`: `_runFIFO` cambia la clave del map de `assetId|||accountId` a `assetId|||groupKey` donde `groupKey = account_group ?? account_id`. Añadida deduplicación de eventos SPLIT por `(assetId, date)` para evitar doble aplicación cuando múltiples cuentas del mismo grupo registran el mismo split.
+  - `src/app/api/taxes/route.ts`: la consulta SQL hace LEFT JOIN con `accounts` para obtener el grupo; cuando se filtra por `accountId`, se amplía automáticamente a todas las cuentas del mismo grupo; tras el FIFO, los resultados se filtran para mostrar solo las ventas de la cuenta seleccionada.
+  - `src/app/api/open-positions/route.ts`: misma expansión de grupo; las posiciones abiertas se muestran a nivel de grupo.
+
 ## 2026-05-27
 
 ### Added
