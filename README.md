@@ -14,7 +14,8 @@ Calculadora web de ganancias y pérdidas patrimoniales para la declaración del 
 - Cálculo FIFO completo con soporte de compras, ventas, splits/contrasplits y dividendos en scrip (`TRANSFER_IN`).
 - Ajuste retroactivo de lotes ante splits, con visualización siempre en términos pre-split.
 - Badges visuales en los lotes para distinguir splits (×N, verde) y contrasplits (×N, amarillo).
-- Filtros por año fiscal, cuenta y activo. Para posiciones abiertas, el filtro de año filtra por fecha de compra del lote.
+- Filtros por año fiscal, **grupo de cuentas**, cuenta y activo. Para posiciones abiertas, el filtro de año filtra por fecha de compra del lote.
+- **FIFO por grupo de cuentas**: si varias cuentas comparten el mismo grupo en Wealthfolio, sus lotes se combinan en un único pool FIFO por activo. Una venta en cualquier cuenta del grupo consume los lotes más antiguos del pool compartido.
 - Login protegido con credenciales configurables por variables de entorno.
 - Acceso a `wealthfolio.db` en modo **solo lectura** — sin riesgo de corrupción.
 
@@ -67,7 +68,12 @@ services:
       - "3001:3000"
     user: "1000:10"
     volumes:
+      # macOS:
       - "${HOME}/Library/Application Support/wealthfolio:/app/db"
+      # Linux (descomenta la línea que corresponda):
+      # - "${HOME}/.local/share/wealthfolio:/app/db"
+      # Ruta personalizada:
+      # - "/ruta/absoluta/al/directorio-wealthfolio:/app/db"
     environment:
       - WF_DB_PATH=/app/db/wealthfolio.db
       - APP_USERNAME=admin
@@ -189,6 +195,19 @@ Las tarjetas de resumen muestran el **número de posiciones abiertas**, **coste 
 
 ---
 
+## Filtros
+
+Los filtros de la barra lateral son acumulativos. El filtro de **Grupo** y el de **Cuenta** son mutuamente exclusivos: seleccionar uno limpia el otro.
+
+| Filtro  | Comportamiento                                                                                                   |
+|---------|------------------------------------------------------------------------------------------------------------------|
+| Año     | Posiciones cerradas: filtra por año de la venta. Posiciones abiertas: filtra por año de compra del lote.         |
+| Grupo   | Muestra las operaciones de **todas** las cuentas del grupo. Aparece solo si hay grupos definidos en Wealthfolio. |
+| Cuenta  | Muestra las operaciones de esa cuenta (el cálculo FIFO sigue usando todos los lotes del grupo al que pertenece). |
+| Activo  | Restringe a un único instrumento financiero.                                                                     |
+
+---
+
 ## Metodología de cálculo
 
 ### FIFO
@@ -203,6 +222,18 @@ Coste    = Σ (Cantidad_lote × Precio_compra × FX_compra + Comisiones_compra �
 ```
 
 Cada operación se convierte a euros al tipo de cambio oficial BCE del día exacto en que ocurrió.
+
+### Grupos de cuentas
+
+Wealthfolio permite asignar un **grupo** a cada cuenta (campo `group` de la tabla `accounts`). Cuando varias cuentas comparten el mismo grupo, sus actividades se procesan en un único pool FIFO por activo:
+
+```
+Pool FIFO = (assetId, groupKey)   donde groupKey = accounts.group ?? account_id
+```
+
+Esto refleja la realidad fiscal española: el criterio FIFO se aplica sobre el conjunto de valores homogéneos del contribuyente, independientemente de en qué cuenta o depositario estén custodiados.
+
+Los lotes de cuentas sin grupo se tratan de forma individual (comportamiento por defecto, idéntico a versiones anteriores).
 
 ### Splits y contrasplits
 
@@ -259,6 +290,7 @@ src/
 │       ├── taxes/route.ts          # GET  /api/taxes          — posiciones cerradas (FIFO)
 │       ├── open-positions/route.ts # GET  /api/open-positions — lotes activos
 │       ├── accounts/route.ts       # GET  /api/accounts
+│       ├── account-groups/route.ts # GET  /api/account-groups — grupos de cuentas
 │       ├── assets/route.ts         # GET  /api/assets
 │       └── debug/route.ts          # GET  /api/debug?symbol=AAPL
 └── lib/

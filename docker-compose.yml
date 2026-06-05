@@ -6,16 +6,22 @@ services:
       - "3001:3000"
     user: "1000:10"
     volumes:
-      # Map the directory as Read/Write. SQLite needs to update .db-shm files in WAL mode
-      # even when the database is opened as read-only.
+      # Mount the Wealthfolio data directory (Read/Write — SQLite WAL mode needs
+      # write access to .db-shm/.db-wal even when the app opens the file read-only).
+      #
+      # macOS (default):
       - "${HOME}/Library/Application Support/wealthfolio:/app/db"
+      # Linux — uncomment and adjust if running on a Linux host:
+      # - "${HOME}/.local/share/wealthfolio:/app/db"
+      # Custom path — use this if your database lives elsewhere:
+      # - "/absolute/path/to/wealthfolio-dir:/app/db"
     environment:
-      # Point to the database file inside the mapped directory
+      # Path to the database file inside the mounted directory
       - WF_DB_PATH=/app/db/wealthfolio.db
-      # Login credentials — change these before deploying
+      # Login credentials — CHANGE THESE before exposing the app on a network
       - APP_USERNAME=admin
-      - APP_PASSWORD=taxfolio
-      # Random secret used to sign the session cookie — change this too
+      - APP_PASSWORD=cambia-esta-contraseña
+      # Random secret for signing the session cookie — CHANGE THIS too
       - AUTH_SECRET=cambia-este-secreto-por-uno-aleatorio
     restart: unless-stopped
     networks:
