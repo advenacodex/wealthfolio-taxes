@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## 2026-06-09
+
+### Added
+- **Número de versión `20260609`**: visible bajo el título "WealthTax" en el sidebar como texto pequeño. Definido como constante `VERSION` en `src/app/page.tsx`. La imagen Docker lleva `LABEL version="20260609"` en el `Dockerfile` y el tag en `docker-compose.yml` pasa de `latest` a `20260609`.
+
+- **Ordenación por Fecha y Activo en ambas tablas**: las cabeceras "Fecha" y "Activo" en la tabla de posiciones cerradas y "Fecha / Activo" en la de abiertas son ahora clickables. Primer clic ordena ASC, segundo DESC, tercer clic elimina la ordenación. El icono muestra el estado actual (↕ neutro, ↑ ASC, ↓ DESC).
+  - `src/app/page.tsx`: añadido componente `SortArrow` y tipos `SortCol`/`SortDir`. `ClosedPositionsTable` ordena por `sellDate` o símbolo del activo. `OpenPositionsTable` ordena por símbolo (Activo) o por la fecha del primer lote de la posición (Fecha). Nuevos iconos `ChevronUp`, `ChevronDown`, `ChevronsUpDown` importados de lucide-react.
+
+- **Columna "Cuenta" en el desglose de lotes**: en ambas vistas (posiciones cerradas y abiertas), las filas de lote de compra muestran ahora la cuenta de origen en una nueva columna "Cuenta" situada después de "Activo".
+  - `src/lib/fifo.ts`: añadido `accountId` (account_id real de la actividad) a las interfaces `Lot`, `RealizedGain.matchedLots` y `OpenPositionLot`. El campo se rellena al crear cada lote en BUY/RECEIVE/TRANSFER_IN y se propaga a `matchedLots` al consumirse en una venta.
+  - `src/app/page.tsx`: `ClosedPositionsTable` y `OpenPositionsTable` reciben ahora la prop `accounts`; ambas tablas incluyen la cabecera "Cuenta" y cada fila de lote muestra el nombre de la cuenta resolviendo `accountId` contra el array de cuentas.
+
 ## 2026-06-05
 
 ### Added

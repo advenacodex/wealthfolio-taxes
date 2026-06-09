@@ -16,6 +16,8 @@ RUN npx next build
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
+LABEL version="20260609"
+
 ENV NODE_ENV=production
 
 # Next.js standalone output

@@ -1,7 +1,7 @@
 services:
   wealthfolio-taxes:
     container_name: wealthfolio-taxes
-    image: wealthfolio-taxes:latest
+    image: wealthfolio-taxes:20260609
     ports:
       - "3001:3000"
     user: "1000:10"

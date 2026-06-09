@@ -14,8 +14,11 @@ Calculadora web de ganancias y pérdidas patrimoniales para la declaración del 
 - Cálculo FIFO completo con soporte de compras, ventas, splits/contrasplits y dividendos en scrip (`TRANSFER_IN`).
 - Ajuste retroactivo de lotes ante splits, con visualización siempre en términos pre-split.
 - Badges visuales en los lotes para distinguir splits (×N, verde) y contrasplits (×N, amarillo).
+- **Columna Cuenta** en el desglose de lotes: cada lote de compra muestra la cuenta de origen.
+- **Ordenación interactiva** por Fecha y Activo en ambas tablas (clic en la cabecera: ASC → DESC → sin orden).
 - Filtros por año fiscal, **grupo de cuentas**, cuenta y activo. Para posiciones abiertas, el filtro de año filtra por fecha de compra del lote.
 - **FIFO por grupo de cuentas**: si varias cuentas comparten el mismo grupo en Wealthfolio, sus lotes se combinan en un único pool FIFO por activo. Una venta en cualquier cuenta del grupo consume los lotes más antiguos del pool compartido.
+- **Número de versión** visible en el sidebar (formato `YYYYMMDD`).
 - Login protegido con credenciales configurables por variables de entorno.
 - Acceso a `wealthfolio.db` en modo **solo lectura** — sin riesgo de corrupción.
 
@@ -25,11 +28,11 @@ Calculadora web de ganancias y pérdidas patrimoniales para la declaración del 
 
 ### Opción A — Usar la imagen precompilada
 
-Si recibes la imagen como fichero `.tar.gz`:
+Si recibes la imagen como fichero `.tar.gz` (p. ej. `wealthfolio-taxes-20260609-amd64.tar.gz`):
 
 ```bash
 # 1. Importar la imagen
-docker load < wealthfolio-taxes-amd64.tar.gz
+docker load < wealthfolio-taxes-20260609-amd64.tar.gz
 
 # 2. Verificar que se importó correctamente
 docker images | grep wealthfolio-taxes
@@ -44,13 +47,14 @@ Continúa con el paso [Configurar y arrancar](#configurar-y-arrancar).
 La imagen se genera para **linux/amd64** (Intel/AMD). Compatible con Mac Apple Silicon mediante emulación QEMU (OrbStack o Docker Desktop con buildx).
 
 ```bash
-docker buildx build --platform linux/amd64 -t wealthfolio-taxes:latest --load .
+# Sustituye YYYYMMDD por la fecha de hoy
+docker build --platform linux/amd64 -t wealthfolio-taxes:YYYYMMDD .
 ```
 
 #### Exportar la imagen para compartirla
 
 ```bash
-docker save wealthfolio-taxes:latest | gzip -9 > wealthfolio-taxes-amd64.tar.gz
+docker save wealthfolio-taxes:YYYYMMDD | gzip > wealthfolio-taxes-YYYYMMDD-amd64.tar.gz
 ```
 
 ---
@@ -63,7 +67,7 @@ Crea un fichero `docker-compose.yml` con el siguiente contenido, ajustando las r
 services:
   wealthfolio-taxes:
     container_name: wealthfolio-taxes
-    image: wealthfolio-taxes:latest
+    image: wealthfolio-taxes:20260609   # usa el tag de la versión que hayas importado
     ports:
       - "3001:3000"
     user: "1000:10"
@@ -108,7 +112,7 @@ docker run -d \
   -e APP_USERNAME=admin \
   -e APP_PASSWORD=cambia-esta-contraseña \
   -e AUTH_SECRET=cambia-este-secreto \
-  wealthfolio-taxes:latest
+  wealthfolio-taxes:20260609
 ```
 
 ---
@@ -148,6 +152,7 @@ Muestra las ventas realizadas. Cada fila es expandible y despliega los lotes de 
 |----------------------|--------------------------------------------------------------|
 | Fecha                | Fecha de la venta                                            |
 | Activo               | Símbolo del instrumento                                      |
+| Cuenta               | Cuenta en la que se realizó la venta                         |
 | Cant.                | Acciones vendidas (términos post-split)                      |
 | Precio               | Precio unitario en moneda original + equivalente €           |
 | Tasa FX              | Tipo de cambio BCE del día (moneda → €)                     |
@@ -182,6 +187,7 @@ Muestra los lotes de compra que aún no han sido vendidos. Cada fila de activo e
 | Columna         | Descripción                                                             |
 |-----------------|-------------------------------------------------------------------------|
 | Fecha           | Fecha de la compra original                                             |
+| Cuenta          | Cuenta en la que se realizó la compra                                   |
 | Acciones        | Acciones del lote (post-split), con badge ×N si hubo split/contrasplit  |
 | Precio compra   | Precio unitario en moneda original + equivalente € (precio pre-split)   |
 | Tasa FX         | Tipo de cambio del día de la compra                                     |

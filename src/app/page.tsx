@@ -11,6 +11,9 @@ import {
   TrendingDown,
   ArrowUpRight,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
   LogOut,
   LockOpen,
   Lock,
@@ -21,6 +24,8 @@ import { twMerge } from "tailwind-merge";
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+const VERSION = "20260609";
 
 // ── Domain interfaces ─────────────────────────────────────────────────────────
 
@@ -51,6 +56,7 @@ interface RealizedGain {
   gain: number;
   matchedLots: {
     buyDate: string;
+    accountId: string;
     quantity: number;
     buyPrice: number;
     buyPriceOriginal: number;
@@ -63,6 +69,7 @@ interface RealizedGain {
 
 interface OpenPositionLot {
   buyDate: string;
+  accountId: string;
   quantity: number;
   unitPriceOriginal: number;
   fxRate: number;
@@ -286,7 +293,10 @@ export default function TaxesDashboard() {
           <div className="w-8 h-8 bg-primary rounded flex items-center justify-center text-primary-foreground">
             <BarChart3 size={20} />
           </div>
-          <h1 className="font-bold text-lg tracking-tight">WealthTax</h1>
+          <div>
+            <h1 className="font-bold text-lg tracking-tight leading-none">WealthTax</h1>
+            <span className="text-[10px] text-muted-foreground tabular-nums">{VERSION}</span>
+          </div>
         </div>
 
         <nav className="flex-1 px-4 space-y-6 overflow-y-auto pt-4">
@@ -521,6 +531,7 @@ export default function TaxesDashboard() {
               ? <ClosedPositionsTable
                   results={safeResults}
                   assets={assets}
+                  accounts={accounts}
                   isLoading={isLoading}
                   expandedRows={expandedRows}
                   toggleRow={toggleRow}
@@ -528,6 +539,7 @@ export default function TaxesDashboard() {
               : <OpenPositionsTable
                   positions={safeOpenPos}
                   assets={assets}
+                  accounts={accounts}
                   isLoading={isLoading}
                   expandedRows={expandedRows}
                   toggleRow={toggleRow}
@@ -541,27 +553,76 @@ export default function TaxesDashboard() {
   );
 }
 
+// ── Sort helpers ─────────────────────────────────────────────────────────────
+
+type SortCol = 'date' | 'asset';
+type SortDir = 'asc' | 'desc';
+
+function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return <ChevronsUpDown size={12} className="inline ml-0.5 opacity-40" />;
+  return dir === 'asc'
+    ? <ChevronUp size={12} className="inline ml-0.5" />
+    : <ChevronDown size={12} className="inline ml-0.5" />;
+}
+
 // ── Closed Positions Table ────────────────────────────────────────────────────
 
 function ClosedPositionsTable({
   results,
   assets,
+  accounts,
   isLoading,
   expandedRows,
   toggleRow,
 }: {
   results: RealizedGain[];
   assets: Asset[];
+  accounts: Account[];
   isLoading: boolean;
   expandedRows: Set<number>;
   toggleRow: (i: number) => void;
 }) {
+  const [sortCol, setSortCol] = useState<SortCol | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const handleSort = (col: SortCol) => {
+    if (sortCol === col) {
+      if (sortDir === 'asc') { setSortDir('desc'); }
+      else { setSortCol(null); setSortDir('asc'); }
+    } else {
+      setSortCol(col); setSortDir('asc');
+    }
+  };
+
+  const localSymbol = (assetId: string) => {
+    const a = assets.find(x => x.id === assetId);
+    return a?.instrument_symbol || a?.display_code || a?.name || assetId;
+  };
+
+  const accountNameFor = (id: string) => accounts.find(a => a.id === id)?.name || id;
+
+  const sortedResults = sortCol
+    ? [...results].sort((a, b) => {
+        const cmp = sortCol === 'date'
+          ? a.sellDate.localeCompare(b.sellDate)
+          : localSymbol(a.assetId).localeCompare(localSymbol(b.assetId), 'es');
+        return sortDir === 'asc' ? cmp : -cmp;
+      })
+    : results;
+
+  const thSort = "px-4 py-3 font-medium whitespace-nowrap cursor-pointer select-none hover:bg-gray-800";
+
   return (
     <table className="w-full text-left text-sm">
       <thead>
         <tr className="bg-black text-white">
-          <th className="px-4 py-3 font-medium whitespace-nowrap">Fecha</th>
-          <th className="px-4 py-3 font-medium">Activo</th>
+          <th className={thSort} onClick={() => handleSort('date')}>
+            Fecha <SortArrow active={sortCol === 'date'} dir={sortDir} />
+          </th>
+          <th className={cn(thSort, "whitespace-nowrap")} onClick={() => handleSort('asset')}>
+            Activo <SortArrow active={sortCol === 'asset'} dir={sortDir} />
+          </th>
+          <th className="px-4 py-3 font-medium whitespace-nowrap">Cuenta</th>
           <th className="px-4 py-3 font-medium text-right">Cant.</th>
           <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Precio</th>
           <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Tasa FX</th>
@@ -573,14 +634,14 @@ function ClosedPositionsTable({
         </tr>
       </thead>
       <tbody className="divide-y divide-border">
-        {results.length === 0 ? (
+        {sortedResults.length === 0 ? (
           <tr>
-            <td colSpan={10} className="px-6 py-12 text-center text-muted-foreground italic">
+            <td colSpan={11} className="px-6 py-12 text-center text-muted-foreground italic">
               {isLoading ? "Buscando operaciones..." : "No hay operaciones realizadas para estos filtros."}
             </td>
           </tr>
         ) : (
-          results.map((r, i) => {
+          sortedResults.map((r, i) => {
             const asset = assets.find(a => a.id === r.assetId);
             const symbol = asset?.instrument_symbol || asset?.display_code || r.assetId;
             const totalVenta = r.quantity * r.sellPriceOriginal;
@@ -623,6 +684,7 @@ function ClosedPositionsTable({
                     </span>
                   </td>
                   <td className="px-4 py-3 font-medium">{symbol}</td>
+                  <td className="px-4 py-3 text-muted-foreground" />
                   <td className="px-4 py-3 text-right tabular-nums">
                     {r.quantity.toLocaleString('es-ES', { maximumFractionDigits: 4 })}
                   </td>
@@ -664,7 +726,10 @@ function ClosedPositionsTable({
                       <td className="pl-8 pr-3 py-1.5 whitespace-nowrap text-muted-foreground font-mono">
                         ↳ {formatDate(lot.buyDate)}
                       </td>
-                      <td className="px-3 py-1.5" />
+                      <td className="px-3 py-1.5 text-muted-foreground" />
+                      <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">
+                        {accountNameFor(lot.accountId)}
+                      </td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
                         {origQty.toLocaleString('es-ES', { maximumFractionDigits: 6 })}
                         {lot.splitFactor !== 1 && (
@@ -704,6 +769,7 @@ function ClosedPositionsTable({
 function OpenPositionsTable({
   positions,
   assets,
+  accounts,
   isLoading,
   expandedRows,
   toggleRow,
@@ -711,16 +777,56 @@ function OpenPositionsTable({
 }: {
   positions: OpenPosition[];
   assets: Asset[];
+  accounts: Account[];
   isLoading: boolean;
   expandedRows: Set<number>;
   toggleRow: (i: number) => void;
   symbolFor: (assetId: string) => string;
 }) {
+  const [sortCol, setSortCol] = useState<SortCol | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const handleSort = (col: SortCol) => {
+    if (sortCol === col) {
+      if (sortDir === 'asc') { setSortDir('desc'); }
+      else { setSortCol(null); setSortDir('asc'); }
+    } else {
+      setSortCol(col); setSortDir('asc');
+    }
+  };
+
+  const accountNameFor = (id: string) => accounts.find(a => a.id === id)?.name || id;
+
+  const sortedPositions = sortCol
+    ? [...positions].sort((a, b) => {
+        let cmp = 0;
+        if (sortCol === 'asset') {
+          cmp = symbolFor(a.assetId).localeCompare(symbolFor(b.assetId), 'es');
+        } else {
+          const dateA = a.lots.length > 0 ? a.lots[0].buyDate : '';
+          const dateB = b.lots.length > 0 ? b.lots[0].buyDate : '';
+          cmp = dateA.localeCompare(dateB);
+        }
+        return sortDir === 'asc' ? cmp : -cmp;
+      })
+    : positions;
+
+  const thSort = "px-4 py-3 font-medium whitespace-nowrap cursor-pointer select-none hover:bg-gray-800";
+
   return (
     <table className="w-full text-left text-sm">
       <thead>
         <tr className="bg-black text-white">
-          <th className="px-4 py-3 font-medium whitespace-nowrap">Fecha / Activo</th>
+          <th className={thSort}>
+            <span onClick={() => handleSort('date')} className="cursor-pointer">
+              Fecha <SortArrow active={sortCol === 'date'} dir={sortDir} />
+            </span>
+            <span className="opacity-40 mx-1">/</span>
+            <span onClick={() => handleSort('asset')} className="cursor-pointer">
+              Activo <SortArrow active={sortCol === 'asset'} dir={sortDir} />
+            </span>
+          </th>
+          <th className="px-4 py-3 font-medium whitespace-nowrap">Cuenta</th>
           <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Acciones</th>
           <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Precio compra</th>
           <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Tasa FX</th>
@@ -730,14 +836,14 @@ function OpenPositionsTable({
         </tr>
       </thead>
       <tbody className="divide-y divide-border">
-        {positions.length === 0 ? (
+        {sortedPositions.length === 0 ? (
           <tr>
-            <td colSpan={7} className="px-6 py-12 text-center text-muted-foreground italic">
+            <td colSpan={8} className="px-6 py-12 text-center text-muted-foreground italic">
               {isLoading ? "Buscando posiciones..." : "No hay posiciones abiertas para estos filtros."}
             </td>
           </tr>
         ) : (
-          positions.map((p, i) => {
+          sortedPositions.map((p, i) => {
             const symbol     = symbolFor(p.assetId);
             const isExpanded = expandedRows.has(i);
             const hasLots    = p.lots.length > 0;
@@ -767,6 +873,8 @@ function OpenPositionsTable({
                       {symbol}
                     </span>
                   </td>
+                  {/* Cuenta — empty at aggregate level */}
+                  <td className="px-4 py-3 text-muted-foreground" />
                   {/* Total shares */}
                   <td className="px-4 py-3 text-right tabular-nums font-semibold">
                     {p.totalQuantity.toLocaleString('es-ES', { maximumFractionDigits: 4 })}
@@ -804,6 +912,10 @@ function OpenPositionsTable({
                       {/* Buy date */}
                       <td className="pl-8 pr-3 py-1.5 whitespace-nowrap text-muted-foreground font-mono">
                         ↳ {formatDate(lot.buyDate)}
+                      </td>
+                      {/* Account */}
+                      <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">
+                        {accountNameFor(lot.accountId)}
                       </td>
                       {/* Quantity + split indicator */}
                       <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">

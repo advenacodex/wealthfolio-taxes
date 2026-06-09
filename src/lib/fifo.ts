@@ -6,6 +6,7 @@ type AdjustedActivity = Activity & { _splitFactor: number };
 
 export interface Lot {
   buyDate: string;
+  accountId: string;         // account that originated this buy lot
   quantity: number;          // post-split adjusted shares (used for FIFO accounting)
   unitPrice: number;         // EUR per post-split share (includes apportioned fee)
   fee: number;               // total EUR fee for this lot (at purchase time)
@@ -32,6 +33,7 @@ export interface RealizedGain {
   gain: number;
   matchedLots: {
     buyDate: string;
+    accountId: string;       // account that originated this buy lot
     quantity: number;        // post-split shares consumed from this lot
     buyPrice: number;        // EUR per post-split share
     buyPriceOriginal: number;// TRUE original pre-split price in original currency
@@ -44,6 +46,7 @@ export interface RealizedGain {
 
 export interface OpenPositionLot {
   buyDate: string;
+  accountId: string;         // account that originated this buy lot
   quantity: number;          // post-split shares remaining in this lot
   unitPriceOriginal: number; // TRUE original pre-split price in original currency
   fxRate: number;
@@ -197,6 +200,7 @@ function _runFIFO(activities: Activity[]): {
       if (lots.length === 0) {
         lots.push({
           buyDate: act.activity_date,
+          accountId: act.account_id,
           quantity: qty,
           unitPrice: 0,
           fee: 0,
@@ -224,6 +228,7 @@ function _runFIFO(activities: Activity[]): {
       const unitCostWithFee = qty > 0 ? price + (fee / qty) : price;
       lots.push({
         buyDate: act.activity_date,
+        accountId: act.account_id,
         quantity: qty,                           // post-split adjusted shares
         unitPrice: unitCostWithFee,              // EUR per post-split share (includes fee)
         fee: fee,
@@ -253,6 +258,7 @@ function _runFIFO(activities: Activity[]): {
 
         matchedLots.push({
           buyDate: lot.buyDate,
+          accountId: lot.accountId,
           quantity: consumeQty,                    // post-split shares sold from this lot
           buyPrice: lot.unitPrice,                 // EUR per post-split share
           buyPriceOriginal: lot.unitPriceOriginal, // original pre-split price
@@ -332,6 +338,7 @@ export function calculateOpenPositions(activities: Activity[]): OpenPosition[] {
         const prop = l.originalQuantity > 0 ? l.quantity / l.originalQuantity : 1;
         return {
           buyDate: l.buyDate,
+          accountId: l.accountId,
           quantity: l.quantity,
           unitPriceOriginal: l.unitPriceOriginal,
           fxRate: l.fxRate,

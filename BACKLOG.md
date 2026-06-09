@@ -6,6 +6,11 @@
 
 # Done
 
+- [x] Añade un numero de version junto al titulo. Version es YYYYMMDD (año mes dia sin espacios). El numero debe constar tambien en la imagen de docker
+
+- [x] En las listas (tanto cerradas como abiertas) añade una flechita en las columnas Fecha y Activo, para hacer que la lista se pueda ordenar por esas columnas
+- [x] En el desglose de lotes de compra, en todas las vistas (cerradas y abiertas) añade una columna "Cuenta" despues de la de la columna Activo, en ella se detalla el La cuenta origen de ese lote.
+
 - [x] Añade Account Group como filtro en la barra lateral (selector "Grupo"), mutuamente exclusivo con el filtro de Cuenta
 - [x] FIFO agrupado por Account Group: al vender un activo en una cuenta, se usan los lotes de todas las cuentas del mismo grupo para el cálculo FIFO
 
