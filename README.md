@@ -4,6 +4,24 @@ Calculadora web de ganancias y pérdidas patrimoniales para la declaración del 
 
 > **100 % local** — Tus datos financieros nunca salen de tu máquina.
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V7V41YCZ2U)
+
+---
+
+## Índice
+
+- [Características](#características)
+- [Requisitos previos](#requisitos-previos)
+- [Despliegue con Docker](#despliegue-con-docker)
+- [Autenticación](#autenticación)
+- [Base de datos](#base-de-datos)
+- [Vistas](#vistas)
+- [Filtros](#filtros)
+- [Metodología de cálculo](#metodología-de-cálculo)
+- [Desarrollo local](#desarrollo-local)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Aviso legal](#aviso-legal)
+
 ---
 
 ## Características
@@ -21,6 +39,14 @@ Calculadora web de ganancias y pérdidas patrimoniales para la declaración del 
 - **Número de versión** visible en el sidebar (formato `YYYYMMDD`).
 - Login protegido con credenciales configurables por variables de entorno.
 - Acceso a `wealthfolio.db` en modo **solo lectura** — sin riesgo de corrupción.
+
+---
+
+## Requisitos previos
+
+- [Wealthfolio](https://wealthfolio.app) instalado y con datos (genera el fichero `wealthfolio.db`).
+- **Para despliegue con Docker:** Docker Engine 20.10+ o Docker Desktop.
+- **Para desarrollo local:** Node.js 20+ y pnpm.
 
 ---
 
@@ -303,10 +329,6 @@ src/
     ├── fifo.ts                     # Motor FIFO: splits, scrip, lotes abiertos y cerrados
     └── db.ts                       # Conexión SQLite — better-sqlite3, read-only
 ```
-
----
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V7V41YCZ2U)
 
 ---
 

@@ -44,3 +44,8 @@ next-env.d.ts
 # Docker exports
 *.tar.gz
 *.tar
+
+# SQLite databases (local data — never commit)
+*.db
+*.db-shm
+*.db-wal
